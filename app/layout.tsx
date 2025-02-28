@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import "./globals.css"
 import { Providers } from "./providers"
 import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 export const metadata: Metadata = {
   title: process.env.NEXT_PUBLIC_ONCHAINKIT_PROJECT_NAME,
@@ -20,6 +21,7 @@ export default function RootLayout({
       <body className="bg-background">
         <Providers>{children}</Providers>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )
