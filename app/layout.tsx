@@ -4,6 +4,15 @@ import "./globals.css"
 import { Providers } from "./providers"
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import dynamic from "next/dynamic"
+
+// Dynamically import the NetworkSwitcher to avoid hydration issues
+// since it accesses window.ethereum which is only available in the browser
+const NetworkSwitcher = dynamic(
+  () =>
+    import("./components/NetworkSwitcher").then((mod) => mod.NetworkSwitcher),
+  { ssr: false }
+)
 
 export const metadata: Metadata = {
   title: process.env.NEXT_PUBLIC_ONCHAINKIT_PROJECT_NAME,
@@ -20,6 +29,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="bg-background">
         <Providers>{children}</Providers>
+        <NetworkSwitcher />
         <Analytics />
         <SpeedInsights />
       </body>

@@ -13,6 +13,13 @@ import { Name } from "@coinbase/onchainkit/identity"
 import { Avatar } from "@coinbase/onchainkit/identity"
 import { ThemeSwitcher } from "./components/ThemeSwitcher"
 import { BlockComparison } from "./components/BlockComparison"
+import dynamic from "next/dynamic"
+
+// Dynamically import the NetworkButton to avoid hydration issues
+const NetworkButton = dynamic(
+  () => import("./components/NetworkButton").then((mod) => mod.NetworkButton),
+  { ssr: false }
+)
 
 export default function Home() {
   return (
@@ -22,6 +29,7 @@ export default function Home() {
           Flashblocks Speed Demo
         </h1>
         <div className="flex items-center gap-3">
+          <NetworkButton />
           <ThemeSwitcher />
           <Wallet>
             <ConnectWallet>
