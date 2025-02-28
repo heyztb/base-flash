@@ -58,12 +58,14 @@ interface FlashBlockData {
 interface FlashBlockSquareProps {
   block: FlashBlockData
   isGenesis?: boolean
+  isSelected?: boolean
   onClick?: () => void
 }
 
 const FlashBlockSquare = ({
   block,
   isGenesis = false,
+  isSelected = false,
   onClick,
 }: FlashBlockSquareProps) => {
   const txCount = block.diff.transactions.length
@@ -78,10 +80,22 @@ const FlashBlockSquare = ({
     <div
       onClick={onClick}
       className={`relative aspect-square border ${
-        isGenesis ? "border-blue-500" : "border-gray-300 dark:border-gray-600"
-      } 
-                 rounded cursor-pointer transition-all hover:shadow-md`}
+        isSelected
+          ? "border-blue-500 dark:border-blue-400 border-2 shadow-md"
+          : isGenesis
+          ? "border-blue-500"
+          : "border-gray-300 dark:border-gray-600"
+      } rounded cursor-pointer transition-all hover:shadow-md ${
+        isSelected ? "ring-2 ring-blue-500 ring-opacity-50" : ""
+      }`}
     >
+      {/* Selected indicator */}
+      {isSelected && (
+        <>
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+        </>
+      )}
+
       {/* Block index indicator */}
       <div className="absolute top-1 left-1 text-xs font-mono bg-white dark:bg-gray-800 px-1 rounded">
         #{block.index}
@@ -90,7 +104,9 @@ const FlashBlockSquare = ({
       {/* Gas used indicator (height of the fill) */}
       <div
         className={`absolute bottom-0 left-0 right-0 ${
-          isGenesis
+          isSelected
+            ? "bg-blue-100 dark:bg-blue-800"
+            : isGenesis
             ? "bg-blue-200 dark:bg-blue-900"
             : "bg-gray-200 dark:bg-gray-700"
         }`}
@@ -103,7 +119,7 @@ const FlashBlockSquare = ({
       </div>
 
       {/* Genesis indicator */}
-      {isGenesis && (
+      {isGenesis && !isSelected && (
         <div className="absolute top-1 right-1">
           <span className="inline-flex h-3 w-3 bg-blue-500 rounded-full animate-pulse"></span>
         </div>
@@ -335,12 +351,24 @@ export function FlashBlocks() {
             <div className="flex justify-between items-center mb-2">
               <div className="text-sm text-gray-600 dark:text-gray-300">
                 {selectedBlock ? (
-                  <span>
-                    Viewing block #{selectedBlock.index} (Block{" "}
-                    {selectedBlock.metadata.block_number})
+                  <span className="flex items-center">
+                    <span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-1.5 animate-pulse"></span>
+                    <strong>
+                      Viewing block #{selectedBlock.index} (Block{" "}
+                      {selectedBlock.metadata.block_number})
+                    </strong>
                   </span>
                 ) : (
-                  <span>Latest blocks (newest first)</span>
+                  <span>
+                    {pauseUpdates ? (
+                      <span className="flex items-center">
+                        <span className="inline-block w-2 h-2 bg-yellow-500 rounded-full mr-1.5"></span>
+                        Updates paused
+                      </span>
+                    ) : (
+                      <span>Latest blocks (newest first)</span>
+                    )}
+                  </span>
                 )}
               </div>
               <div>
@@ -375,6 +403,7 @@ export function FlashBlocks() {
                   key={`${block.payload_id}-${block.index}`}
                   block={block}
                   isGenesis={block.index === 0}
+                  isSelected={block === selectedBlock}
                   onClick={() => {
                     setSelectedBlock(block)
                     // Automatically pause updates when a block is selected
@@ -471,11 +500,11 @@ export function FlashBlocks() {
                 <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-3">
                   <h3 className="font-medium text-sm mb-2 flex items-center">
                     <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs px-2 py-0.5 rounded mr-2">
-                      Genesis Block Info
+                      Fresh Block Info
                     </span>
                     {!displayBlock.base && latestGenesisBlock && (
                       <span className="text-xs text-gray-500">
-                        (from latest genesis block #{latestGenesisBlock.index})
+                        (from latest fresh block #{latestGenesisBlock.index})
                       </span>
                     )}
                   </h3>

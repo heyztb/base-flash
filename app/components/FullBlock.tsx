@@ -20,9 +20,14 @@ const fullBlockClient = createPublicClient({
 interface FullBlockSquareProps {
   block: ExtendedBlock
   onClick?: () => void
+  isSelected?: boolean
 }
 
-const FullBlockSquare = ({ block, onClick }: FullBlockSquareProps) => {
+const FullBlockSquare = ({
+  block,
+  onClick,
+  isSelected = false,
+}: FullBlockSquareProps) => {
   const txCount = Array.isArray(block.transactions)
     ? block.transactions.length
     : 0
@@ -36,8 +41,17 @@ const FullBlockSquare = ({ block, onClick }: FullBlockSquareProps) => {
   return (
     <div
       onClick={onClick}
-      className="relative aspect-square border border-gray-300 dark:border-gray-600 rounded cursor-pointer transition-all hover:shadow-md"
+      className={`relative aspect-square border ${
+        isSelected
+          ? "border-blue-500 dark:border-blue-400 border-2 shadow-md"
+          : "border-gray-300 dark:border-gray-600"
+      } rounded cursor-pointer transition-all hover:shadow-md`}
     >
+      {/* Selected indicator */}
+      {isSelected && (
+        <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full"></div>
+      )}
+
       {/* Block number indicator */}
       <div className="absolute top-1 left-1 text-xs font-mono bg-white dark:bg-gray-800 px-1 rounded">
         #{block.number?.toString()}
@@ -45,7 +59,11 @@ const FullBlockSquare = ({ block, onClick }: FullBlockSquareProps) => {
 
       {/* Gas used indicator (height of the fill) */}
       <div
-        className="absolute bottom-0 left-0 right-0 bg-gray-200 dark:bg-gray-700"
+        className={`absolute bottom-0 left-0 right-0 ${
+          isSelected
+            ? "bg-blue-100 dark:bg-blue-800"
+            : "bg-gray-200 dark:bg-gray-700"
+        }`}
         style={{ height: `${gasPercentage}%`, opacity }}
       ></div>
 
@@ -231,12 +249,17 @@ export function FullBlocks() {
           <div className="flex justify-between items-center mb-2">
             <div className="text-sm text-gray-600 dark:text-gray-300">
               {selectedBlock ? (
-                <span>Viewing block #{selectedBlock.number?.toString()}</span>
+                <span className="flex items-center">
+                  <span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-1.5 animate-pulse"></span>
+                  <strong>
+                    Viewing block #{selectedBlock.number?.toString()}
+                  </strong>
+                </span>
               ) : (
                 <span>
                   {pauseUpdates ? (
                     <span className="flex items-center">
-                      <span className="inline-block w-2 h-2 bg-yellow-500 rounded-full mr-1"></span>
+                      <span className="inline-block w-2 h-2 bg-yellow-500 rounded-full mr-1.5"></span>
                       Updates paused
                     </span>
                   ) : (
@@ -276,6 +299,7 @@ export function FullBlocks() {
               <FullBlockSquare
                 key={`${block.hash}-${index}`}
                 block={block}
+                isSelected={selectedBlock?.hash === block.hash}
                 onClick={() => {
                   setSelectedBlock(block)
                   // Automatically pause updates when a block is selected
