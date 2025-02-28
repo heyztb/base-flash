@@ -354,7 +354,7 @@ export function FlashBlocks() {
                   <span className="flex items-center">
                     <span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-1.5 animate-pulse"></span>
                     <strong>
-                      Viewing block #{selectedBlock.index} (Block{" "}
+                      Viewing index #{selectedBlock.index} (Block{" "}
                       {selectedBlock.metadata.block_number})
                     </strong>
                   </span>
