@@ -1,7 +1,8 @@
 // src/components/FullBlocks.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import React from "react"
 import { Block, http, createPublicClient } from "viem"
 import { baseSepolia } from "wagmi/chains"
 
@@ -15,30 +16,124 @@ const fullBlockClient = createPublicClient({
   transport: http("https://sepolia.base.org"),
 })
 
+// Component to render a single full block square
+interface FullBlockSquareProps {
+  block: ExtendedBlock
+  onClick?: () => void
+}
+
+const FullBlockSquare = ({ block, onClick }: FullBlockSquareProps) => {
+  const txCount = Array.isArray(block.transactions)
+    ? block.transactions.length
+    : 0
+  const gasUsed = block.gasUsed ? Number(block.gasUsed) : 0
+  const gasLimit = block.gasLimit ? Number(block.gasLimit) : 30000000 // Default max if not available
+  const gasPercentage = Math.min((gasUsed / gasLimit) * 100, 100)
+
+  // Generate a color based on transaction count (more tx = darker blue)
+  const opacity = Math.min(0.2 + (txCount / 10) * 0.8, 1)
+
+  return (
+    <div
+      onClick={onClick}
+      className="relative aspect-square border border-gray-300 dark:border-gray-600 rounded cursor-pointer transition-all hover:shadow-md"
+    >
+      {/* Block number indicator */}
+      <div className="absolute top-1 left-1 text-xs font-mono bg-white dark:bg-gray-800 px-1 rounded">
+        #{block.number?.toString()}
+      </div>
+
+      {/* Gas used indicator (height of the fill) */}
+      <div
+        className="absolute bottom-0 left-0 right-0 bg-gray-200 dark:bg-gray-700"
+        style={{ height: `${gasPercentage}%`, opacity }}
+      ></div>
+
+      {/* Transaction count indicator */}
+      <div className="absolute bottom-1 right-1 text-xs font-mono bg-white dark:bg-gray-800 px-1 rounded">
+        {txCount}tx
+      </div>
+    </div>
+  )
+}
+
 export function FullBlocks() {
+  const [blocks, setBlocks] = useState<ExtendedBlock[]>([])
   const [latestBlock, setLatestBlock] = useState<ExtendedBlock | null>(null)
+  const [selectedBlock, setSelectedBlock] = useState<ExtendedBlock | null>(null)
   const [expandedView, setExpandedView] = useState(false)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
+  const [visualizationType, setVisualizationType] = useState<
+    "list" | "squares"
+  >("squares")
+  const [pauseUpdates, setPauseUpdates] = useState(false)
+
+  // Use a ref to access the latest pauseUpdates state in the interval callback
+  const pauseUpdatesRef = useRef(pauseUpdates)
+  useEffect(() => {
+    pauseUpdatesRef.current = pauseUpdates
+  }, [pauseUpdates])
+
+  const displayBlock = selectedBlock || latestBlock
 
   useEffect(() => {
+    let isMounted = true
+    let interval: NodeJS.Timeout | null = null
+
     const fetchBlock = async () => {
       try {
+        // Skip if updates are paused - use the ref's current value
+        if (pauseUpdatesRef.current) {
+          console.log("Skipping block fetch while paused")
+          return
+        }
+
         const block = (await fullBlockClient.getBlock({
           blockTag: "pending",
           includeTransactions: true,
         })) as unknown as ExtendedBlock
-        setLatestBlock(block)
+
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setLatestBlock(block)
+
+          // Add new block to the array if it's not already there
+          setBlocks((prevBlocks) => {
+            // Check if we already have this block by number and hash
+            const exists = prevBlocks.some(
+              (prevBlock) =>
+                prevBlock.number === block.number &&
+                prevBlock.hash === block.hash
+            )
+
+            if (exists) return prevBlocks
+
+            const newBlocks = [block, ...prevBlocks]
+            // Limit array size to prevent memory issues
+            return newBlocks.slice(0, 20)
+          })
+        }
       } catch (error) {
         console.error("Error fetching block:", error)
       }
     }
 
-    fetchBlock() // Initial fetch
-    const interval = setInterval(fetchBlock, 2000) // Poll every 2s
+    // Initial fetch
+    fetchBlock()
 
-    // Cleanup interval on component unmount
-    return () => clearInterval(interval)
-  }, [])
+    // Set up interval only if not paused
+    if (!pauseUpdatesRef.current) {
+      interval = setInterval(fetchBlock, 2000) // Poll every 2s
+    }
+
+    // Cleanup function
+    return () => {
+      isMounted = false
+      if (interval) {
+        clearInterval(interval)
+      }
+    }
+  }, [pauseUpdates]) // Re-run effect when pause state changes
 
   // Function to copy text to clipboard
   const copyToClipboard = async (text: string) => {
@@ -110,22 +205,97 @@ export function FullBlocks() {
             (2s)
           </span>
         </h2>
-        <button
-          onClick={() => setExpandedView(!expandedView)}
-          className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
-        >
-          {expandedView ? "Less Details" : "More Details"}
-        </button>
+        <div className="flex space-x-2">
+          <button
+            onClick={() =>
+              setVisualizationType(
+                visualizationType === "list" ? "squares" : "list"
+              )
+            }
+            className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+          >
+            {visualizationType === "list" ? "Show Blocks" : "Hide Blocks"}
+          </button>
+          <button
+            onClick={() => setExpandedView(!expandedView)}
+            className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+          >
+            {expandedView ? "Less Details" : "More Details"}
+          </button>
+        </div>
       </div>
 
-      {latestBlock ? (
+      {/* Squares visualization */}
+      {visualizationType === "squares" && blocks.length > 0 && (
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-2">
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              {selectedBlock ? (
+                <span>Viewing block #{selectedBlock.number?.toString()}</span>
+              ) : (
+                <span>
+                  {pauseUpdates ? (
+                    <span className="flex items-center">
+                      <span className="inline-block w-2 h-2 bg-yellow-500 rounded-full mr-1"></span>
+                      Updates paused
+                    </span>
+                  ) : (
+                    <span>Latest blocks (newest first)</span>
+                  )}
+                </span>
+              )}
+            </div>
+            <div>
+              <button
+                onClick={() => {
+                  // When unpausing, clear any selection
+                  if (pauseUpdates) {
+                    setSelectedBlock(null)
+                  }
+                  setPauseUpdates(!pauseUpdates)
+                  console.log(
+                    "Pause updates toggled to:",
+                    !pauseUpdates,
+                    "Selection cleared:",
+                    pauseUpdates
+                  )
+                }}
+                className={`text-xs px-2 py-1 rounded transition-colors ${
+                  pauseUpdates
+                    ? "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800"
+                    : "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+                }`}
+              >
+                {pauseUpdates ? "Resume Updates" : "Pause Updates"}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-5 gap-2 mb-3">
+            {blocks.slice(0, 10).map((block, index) => (
+              <FullBlockSquare
+                key={`${block.hash}-${index}`}
+                block={block}
+                onClick={() => {
+                  setSelectedBlock(block)
+                  // Automatically pause updates when a block is selected
+                  setPauseUpdates(true)
+                  console.log("Selected block and paused updates")
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {displayBlock ? (
         <div className="space-y-2">
           <div className="flex justify-between items-center">
             <span className="text-gray-600 dark:text-gray-300">
               Block Number:
             </span>
             <span className="font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">
-              {latestBlock.number?.toString()}
+              {displayBlock.number?.toString()}
             </span>
           </div>
 
@@ -133,7 +303,7 @@ export function FullBlocks() {
             <span className="text-gray-600 dark:text-gray-300">Timestamp:</span>
             <span className="font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">
               {new Date(
-                Number(latestBlock.timestamp) * 1000
+                Number(displayBlock.timestamp) * 1000
               ).toLocaleTimeString()}
             </span>
           </div>
@@ -142,12 +312,12 @@ export function FullBlocks() {
             <span className="text-gray-600 dark:text-gray-300">Hash:</span>
             <span
               className="font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm truncate max-w-[220px] relative group cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              title={`Click to copy: ${latestBlock.hash}`}
+              title={`Click to copy: ${displayBlock.hash}`}
               onClick={() =>
-                latestBlock.hash && copyToClipboard(latestBlock.hash)
+                displayBlock.hash && copyToClipboard(displayBlock.hash)
               }
             >
-              {latestBlock.hash}
+              {displayBlock.hash}
               {/* Tooltip */}
               <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                 {copyFeedback || "Click to copy"}
@@ -158,8 +328,8 @@ export function FullBlocks() {
           <div className="flex justify-between items-center">
             <span className="text-gray-600 dark:text-gray-300">Gas Used:</span>
             <span className="font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">
-              {latestBlock.gasUsed
-                ? Number(latestBlock.gasUsed).toLocaleString()
+              {displayBlock.gasUsed
+                ? Number(displayBlock.gasUsed).toLocaleString()
                 : "N/A"}
             </span>
           </div>
@@ -169,8 +339,8 @@ export function FullBlocks() {
               Transactions:
             </span>
             <span className="font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">
-              {Array.isArray(latestBlock.transactions)
-                ? latestBlock.transactions.length
+              {Array.isArray(displayBlock.transactions)
+                ? displayBlock.transactions.length
                 : "0"}
             </span>
           </div>
@@ -182,10 +352,10 @@ export function FullBlocks() {
                   Recent Transactions:
                 </h3>
                 <div className="max-h-32 overflow-y-auto space-y-1 p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                  {Array.isArray(latestBlock.transactions) &&
-                  latestBlock.transactions.length > 0 ? (
+                  {Array.isArray(displayBlock.transactions) &&
+                  displayBlock.transactions.length > 0 ? (
                     <>
-                      {latestBlock.transactions.slice(0, 3).map((tx, i) => (
+                      {displayBlock.transactions.slice(0, 3).map((tx, i) => (
                         <div
                           key={i}
                           className="text-xs font-mono truncate cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors relative group"
@@ -201,9 +371,9 @@ export function FullBlocks() {
                           </span>
                         </div>
                       ))}
-                      {latestBlock.transactions.length > 3 && (
+                      {displayBlock.transactions.length > 3 && (
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          + {latestBlock.transactions.length - 3} more
+                          + {displayBlock.transactions.length - 3} more
                           transactions
                         </div>
                       )}
@@ -224,11 +394,11 @@ export function FullBlocks() {
                     <div
                       className="font-mono truncate cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors relative group"
                       onClick={() =>
-                        latestBlock.parentHash &&
-                        copyToClipboard(latestBlock.parentHash)
+                        displayBlock.parentHash &&
+                        copyToClipboard(displayBlock.parentHash)
                       }
                     >
-                      {latestBlock.parentHash?.substring(0, 10)}...
+                      {displayBlock.parentHash?.substring(0, 10)}...
                       {/* Tooltip */}
                       <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                         {copyFeedback || "Click to copy"}
@@ -238,8 +408,8 @@ export function FullBlocks() {
                   <div className="p-2 bg-gray-50 dark:bg-gray-700 rounded">
                     <div className="font-medium mb-1">Gas Limit</div>
                     <div className="font-mono truncate">
-                      {latestBlock.gasLimit
-                        ? Number(latestBlock.gasLimit).toLocaleString()
+                      {displayBlock.gasLimit
+                        ? Number(displayBlock.gasLimit).toLocaleString()
                         : "N/A"}
                     </div>
                   </div>
